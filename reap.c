@@ -6,6 +6,7 @@
  * http://creativecommons.org/publicdomain/zero/1.0/
  */
 
+
 #define _GNU_SOURCE
 
 #include <sys/prctl.h>
@@ -24,11 +25,14 @@
 sig_atomic_t do_slay;
 int do_wait;
 int verbose;
+int dolog;
 int no_new_privs;
+FILE *output;
+
 
 #define E(str, ...) do { fprintf(stderr, "reap: " str ": %s\n", ## __VA_ARGS__, strerror(errno)); } while (0)
 #define F(str, ...) do { E(str, ## __VA_ARGS__); exit(111); } while (0)
-#define V(...) do { if (verbose) fprintf(stderr, "reap: " __VA_ARGS__); } while (0)
+#define V(...) do { if (dolog) fprintf(output, __VA_ARGS__); if (verbose) fprintf(stderr, "reap: " __VA_ARGS__); } while (0)
 
 // TERM/INT -> always reap
 // EXIT -> reap (default) or wait
@@ -82,20 +86,32 @@ int
 main(int argc, char *argv[]) {
 
 	int c;
-        while ((c = getopt(argc, argv, "+vwx")) != -1) {
+    output = stdout;
+        while ((c = getopt(argc, argv, "+vwxo:")) != -1) {
 		switch (c) {
 		case 'v': verbose = 1; break;
 		case 'w': do_wait = 1; break;
+        case 'o':
+            dolog = 1;
+            output = fopen(optarg, "w");
+            if (!output) {
+                perror("fopen");
+                exit(1);
+            }
+            break;
 		case 'x': no_new_privs = 1; break;
 		default:
                         fprintf(stderr,
 "Usage: %s [-vwx] COMMAND...\n"
 "\t-v\tverbose\n"
+"\t-o\tFILE\n"
 "\t-w\twait for all spawned processes to finish (default: start reaping)\n"
 "\t-x\tforbid execution of binaries we cannot kill\n",
                             argv[0]);
                         exit(1);
 		}
+        if(verbose && dolog)
+             fprintf(output, "started\n");
 	}
 
 	if (prctl(PR_SET_CHILD_SUBREAPER, 1) != 0)
